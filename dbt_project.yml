@@ -1,0 +1,20 @@
+name: 'job_market'
+version: '1.0.0'
+config-version: 2
+
+profile: 'job_market'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  job_market:
+    staging:
+      +materialized: view      # lightweight — just normalise raw tables
+    intermediate:
+      +materialized: table     # heavier joins, materialise for performance
+    marts:
+      +materialized: table     # final KPI outputs read by Elasticsearch indexer
