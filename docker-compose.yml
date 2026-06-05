@@ -12,11 +12,13 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     PYTHONPATH: /opt/airflow/dags
+    _PIP_ADDITIONAL_REQUIREMENTS: ''
   volumes:
     - ./dags:/opt/airflow/dags
     - ./dbt:/opt/airflow/dbt
     - ./data:/opt/airflow/data
     - ./logs:/opt/airflow/logs
+    - ./requirements.txt:/requirements.txt
   depends_on:
     postgres:
       condition: service_healthy
@@ -24,7 +26,7 @@ x-airflow-common: &airflow-common
 
 services:
 
-  # ── Airflow metadata database ──────────────────────────────────────────────
+  # ── Airflow metadata + Superset metadata database ─────────────────────────
   postgres:
     image: postgres:15
     environment:
@@ -33,6 +35,7 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/pg_init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
@@ -77,11 +80,44 @@ services:
       elasticsearch:
         condition: service_healthy
 
+  # ── Apache Superset (dashboard) ────────────────────────────────────────────
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-changeme_superset_secret_32chars!!}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://airflow:airflow@postgres/superset
+      SUPERSET_WEBSERVER_PORT: 8088
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data:ro        # read DuckDB lake.duckdb (read-only)
+      - superset_home:/app/superset_home
+    command: >
+      bash -c "
+        superset db upgrade &&
+        superset fab create-admin
+          --username admin
+          --firstname Admin
+          --lastname User
+          --email admin@example.com
+          --password admin 2>/dev/null || true &&
+        superset init &&
+        gunicorn --bind 0.0.0.0:8088 --timeout 120 --workers 2
+          'superset.app:create_app()'
+      "
+    restart: unless-stopped
+
   # ── Airflow init (runs once, then exits) ───────────────────────────────────
   airflow-init:
     <<: *airflow-common
     command: >
       bash -c "
+        pip install -r /requirements.txt --quiet &&
         airflow db migrate &&
         airflow users create
           --username ${_AIRFLOW_WWW_USER_USERNAME:-admin}
@@ -96,7 +132,8 @@ services:
   # ── Airflow webserver ──────────────────────────────────────────────────────
   airflow-webserver:
     <<: *airflow-common
-    command: webserver
+    command: >
+      bash -c "pip install -r /requirements.txt --quiet && airflow webserver"
     ports:
       - "8080:8080"
     healthcheck:
@@ -108,10 +145,12 @@ services:
   # ── Airflow scheduler ─────────────────────────────────────────────────────
   airflow-scheduler:
     <<: *airflow-common
-    command: scheduler
+    command: >
+      bash -c "pip install -r /requirements.txt --quiet && airflow scheduler"
     restart: unless-stopped
 
 volumes:
   postgres_data:
   localstack_data:
   es_data:
+  superset_home:

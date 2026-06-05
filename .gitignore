@@ -1,0 +1,24 @@
+# secrets
+.env
+
+# pipeline data (auto-created, can be large)
+data/
+logs/
+
+# dbt compiled artefacts
+dbt/target/
+dbt/dbt_packages/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+.md
+
+# macOS
+.DS_Store

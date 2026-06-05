@@ -1,10 +1,18 @@
 # Python packages installed into the Airflow containers.
 # Add new dependencies here — they are picked up on the next `docker compose build`.
 
+# ── Pipeline core ──────────────────────────────────────────────────────────
 apache-airflow-providers-amazon==8.22.0   # S3Hook, S3 operators
 dbt-duckdb==1.8.1                         # DBT adapter for DuckDB
 duckdb==0.10.3                            # DuckDB engine
 boto3==1.34.0                             # AWS SDK (LocalStack S3)
-requests==2.31.0                          # HTTP calls to Adzuna / BLS APIs
+requests==2.31.0                          # HTTP calls to Adzuna API
 elasticsearch==8.13.0                     # Elasticsearch Python client
 pandas==2.2.2                             # DataFrame utilities
+pyarrow==15.0.2                           # Parquet / Arrow support for DuckDB
+
+# ── Machine learning ───────────────────────────────────────────────────────
+lightgbm==4.3.0                           # Gradient-boosted salary predictor
+prophet==1.1.5                            # Time-series skill demand forecasting
+scikit-learn==1.4.2                       # Preprocessing, metrics, train/test split
+numpy==1.26.4                             # Numerical base (pinned for LightGBM compat)

@@ -1,0 +1,7 @@
+job_market:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /opt/airflow/data/lake.duckdb
+      threads: 4
