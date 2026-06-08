@@ -1,126 +1,131 @@
 # how to test stuff
 
-a practical guide to running the whole pipeline and checking it works. run everything from the project root.
+a phased, handheld guide to running the whole pipeline end to end. run every command from the project root.
 
-## 1. what you need
+## phase 1 — pre-flight
 
-docker desktop running, the aws cli installed, and python 3 on your machine. an adzuna api key is optional — without one the pipeline makes synthetic data, which is fine for testing.
+- start docker desktop and make sure it's actually running.
+- check you have python 3 and the aws cli installed.
+- adzuna api key is optional. without one the pipeline generates synthetic data, which is fine for testing.
 
-## 2. set up your env
+## phase 2 — project setup
+
+**1. environment variables.** copy the template:
 
 ```bash
 cp .env.example .env
 ```
 
-open `.env` and drop in your adzuna app id and key if you have them. leave the rest as is.
+open `.env`, paste your adzuna app id and key if you have them, otherwise leave it as is and save.
 
-## 3. make the data folders
-
-these are gitignored and not created for you:
+**2. data folders.** these are gitignored, so they aren't created for you:
 
 ```bash
 mkdir -p data logs
 ```
 
-## 4. build and start
+(if you hit a duckdb permission error later, widen the perms: `chmod 777 data/`.)
 
-the airflow image now bakes its python deps in at build time, so the first start does a one-time build (a couple of minutes). after that, starts are instant.
+## phase 3 — boot the infrastructure
+
+**1. build the image.** python deps are baked in at build time, so the first build takes a couple of minutes. you only redo this after editing `requirements.txt`.
 
 ```bash
-docker compose build               # one time, or after editing requirements.txt
-docker compose up airflow-init     # sets up the db and admin user, then exits
-docker compose up -d               # starts everything in the background
+docker compose build
 ```
 
-give it a minute to settle, then check nothing is crash looping:
+**2. initialize the database.** sets up airflow's metadata db and the admin user, then exits on its own.
+
+```bash
+docker compose up airflow-init
+```
+
+**3. start everything else** in the background:
+
+```bash
+docker compose up -d
+```
+
+give it ~60 seconds, then confirm nothing is crash looping:
 
 ```bash
 docker compose ps
 ```
 
-everything should say running or healthy. if airflow keeps restarting, look at its logs:
+everything should say running or healthy. if airflow keeps restarting, check `docker compose logs airflow-scheduler`.
 
-```bash
-docker compose logs airflow-scheduler
-```
-
-## 5. create the s3 bucket
+**4. create the fake s3 bucket** (localstack stands in for aws):
 
 ```bash
 bash scripts/init_localstack.sh
 ```
 
-once per fresh start. if you ever run `docker compose down -v`, do it again.
+once per fresh start. you'll redo it after any `docker compose down -v`.
 
-## 6. run the pipeline
+## phase 4 — run the pipeline
 
-open airflow at http://localhost:8081 (admin / admin), find `developer_job_market_pipeline`, toggle it on, and hit trigger. or from the terminal:
+trigger the dag, either way:
 
-```bash
-docker compose exec airflow-scheduler airflow dags trigger developer_job_market_pipeline
-```
+- **ui:** open http://localhost:8081 (admin / admin), find `developer_job_market_pipeline`, toggle it on, hit trigger.
+- **terminal:**
 
-watch the graph view until every task is green. it takes a few minutes because the ml tasks train models.
+  ```bash
+  docker compose exec airflow-scheduler airflow dags trigger developer_job_market_pipeline
+  ```
 
-## 7. check the core pipeline
+watch the graph view until every task is green. it takes a few minutes because the ml tasks train models. if one feature task fails it won't take down the run — read that task's logs and retry just it.
 
-the main flow is `fetch -> load -> dbt -> ml -> index`. confirm the marts landed in elasticsearch:
+## phase 5 — verify the data
+
+**1. core indices.** you should see `salary_by_skill`, `skill_demand`, `forecasts`, `salary_predictions`, `salary_comparison`:
 
 ```bash
 curl http://localhost:9200/_cat/indices?v
 ```
 
-you should see indices like `salary_by_skill`, `skill_demand`, `forecasts`, `salary_predictions`, and `salary_comparison`.
-
-## 8. check the extra features
-
-each one is an independent add-on, so any of these can be empty without breaking the rest.
+**2. extra features** (each is independent and can be empty without breaking the rest):
 
 ```bash
-curl http://localhost:9200/skill_cooccurrence/_search?size=3   # skill co-occurrence
-curl http://localhost:9200/remote_premium/_search?size=3       # remote pay analysis
-curl http://localhost:9200/skill_gap/_search?size=3            # skill gap
-curl http://localhost:9200/salary_anomalies/_search?size=3     # salary anomalies
-curl http://localhost:9200/forecast_trends/_search?size=3      # forecast trends
-curl http://localhost:9200/pipeline_metrics/_search?size=3     # run metrics
+curl http://localhost:9200/skill_cooccurrence/_search?size=3
+curl http://localhost:9200/remote_premium/_search?size=3
+curl http://localhost:9200/skill_gap/_search?size=3
+curl http://localhost:9200/salary_anomalies/_search?size=3
+curl http://localhost:9200/forecast_trends/_search?size=3
+curl http://localhost:9200/pipeline_metrics/_search?size=3
 ```
 
-for the s3 parquet export, list the formatted layer:
+heads up: forecasts (and anything built on them) only fill once there are 3+ months of postings. on a single run they may be empty — that's expected.
+
+**3. s3 formatted layer:**
 
 ```bash
 aws --endpoint-url http://localhost:4566 s3 ls s3://developer-job-market/data/formatted/ --recursive
 ```
 
-heads up: forecasts (and anything built on them) only fill once there are at least three months of postings. on a single run they may be empty — that's expected.
+## phase 6 — visualize
 
-## 9. set up the kibana dashboard
+**1. set up kibana:**
 
 ```bash
 python scripts/init_kibana.py
 ```
 
-then open http://localhost:5601, go to dashboards, and look for "developer job market". the new indices also show up as index patterns under discover.
+**2. view it:** open http://localhost:5601 → dashboards → "developer job market".
 
-## 10. poke at the data directly (optional)
+## quick reference
 
-```bash
-docker compose exec airflow-scheduler bash
-cd /opt/airflow/dbt
-dbt run --profiles-dir . --project-dir /opt/airflow/dbt
-```
+| interface | url | login |
+|---|---|---|
+| airflow (pipeline) | http://localhost:8081 | admin / admin |
+| kibana (dashboards) | http://localhost:5601 | — |
+| superset (alt dashboards) | http://localhost:8088 | admin / admin |
+| elasticsearch | http://localhost:9200 | — |
 
-## 11. the interfaces
-
-- airflow: http://localhost:8081 (admin / admin)
-- kibana: http://localhost:5601
-- elasticsearch: http://localhost:9200
-- superset: http://localhost:8088 (admin / admin)
-
-## 12. tear down
+**shut down:**
 
 ```bash
 docker compose down       # stop containers, keep data
-docker compose down -v    # stop and wipe all volumes for a clean slate
+docker compose down -v    # stop and wipe all volumes (then re-run init_localstack.sh next start)
 ```
 
 ## quick troubleshooting
@@ -128,4 +133,5 @@ docker compose down -v    # stop and wipe all volumes for a clean slate
 - **changed requirements.txt?** rebuild with `docker compose build` — deps are baked into the image, not installed on startup.
 - **bucket not found:** rerun `bash scripts/init_localstack.sh`.
 - **duckdb permission error:** make sure `data/` exists and is writable (`chmod 777 data/`).
-- **a feature index is empty:** check that task in the airflow graph. it fails on its own without taking down the rest of the run, so read its logs and retry just that task.
+- **a feature index is empty:** check that task in the airflow graph, read its logs, and retry just that task.
+- **poke at the data directly:** `docker compose exec airflow-scheduler bash`, then `cd /opt/airflow/dbt && dbt run --profiles-dir . --project-dir /opt/airflow/dbt`.
