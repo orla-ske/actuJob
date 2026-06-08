@@ -90,14 +90,14 @@ bash scripts/init_localstack.sh
 
 | Service | URL | Credentials |
 |---|---|---|
-| Airflow | http://localhost:8080 | admin / admin |
+| Airflow | http://localhost:8081 | admin / admin |
 | Kibana | http://localhost:5601 | — |
 | Elasticsearch | http://localhost:9200 | — |
 | LocalStack S3 | http://localhost:4566 | — |
 
 ## Running the pipeline
 
-In the Airflow UI (http://localhost:8080):
+In the Airflow UI (http://localhost:8081):
 1. Find the DAG `developer_job_market_pipeline`
 2. Toggle it **On**
 3. Click **Trigger DAG** to run it immediately
@@ -142,6 +142,8 @@ Never commit `.env`. Share credentials with teammates through a password manager
 
 **Airflow containers keep restarting**  
 Check logs: `docker compose logs airflow-scheduler`. Usually a missing dependency in `requirements.txt`.
+Python deps are baked into the image at build time, so after editing `requirements.txt` rebuild with
+`docker compose build` (or `docker compose up --build`) before starting.
 
 **LocalStack bucket not found**  
 Re-run `bash scripts/init_localstack.sh`. The bucket is not persisted between `docker compose down -v` runs.

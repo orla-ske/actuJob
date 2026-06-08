@@ -1,0 +1,16 @@
+# keep the build context small — the Dockerfile only needs requirements.txt.
+# without this, the pipeline's data/ (lake.duckdb, parquet exports) and logs/
+# would be shipped to the docker daemon on every build.
+.git
+data/
+logs/
+dbt/target/
+dbt/dbt_packages/
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+.vscode/
+testing/
+.claude/
+.env

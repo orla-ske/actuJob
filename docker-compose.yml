@@ -1,7 +1,8 @@
-version: '3.8'
-
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.0
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: actujob-airflow:2.9.0
   env_file:
     - .env
   environment:
@@ -12,13 +13,11 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     PYTHONPATH: /opt/airflow/dags
-    _PIP_ADDITIONAL_REQUIREMENTS: ''
   volumes:
     - ./dags:/opt/airflow/dags
     - ./dbt:/opt/airflow/dbt
     - ./data:/opt/airflow/data
     - ./logs:/opt/airflow/logs
-    - ./requirements.txt:/requirements.txt
   depends_on:
     postgres:
       condition: service_healthy
@@ -98,44 +97,23 @@ services:
       - ./data:/app/data:ro        # read duckdb lake.duckdb (read-only)
       - superset_home:/app/superset_home
     command: >
-      bash -c "
-        superset db upgrade &&
-        superset fab create-admin
-          --username admin
-          --firstname Admin
-          --lastname User
-          --email admin@example.com
-          --password admin 2>/dev/null || true &&
-        superset init &&
-        gunicorn --bind 0.0.0.0:8088 --timeout 120 --workers 2
-          'superset.app:create_app()'
-      "
+      bash -c "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@example.com --password admin 2>/dev/null || true && superset init && gunicorn --bind 0.0.0.0:8088 --timeout 120 --workers 2 'superset.app:create_app()'"
     restart: unless-stopped
 
   # ── airflow init (runs once, then exits) ───────────────────────────────────
   airflow-init:
     <<: *airflow-common
     command: >
-      bash -c "
-        pip install -r /requirements.txt --quiet &&
-        airflow db migrate &&
-        airflow users create
-          --username ${_AIRFLOW_WWW_USER_USERNAME:-admin}
-          --password ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
-          --firstname Admin
-          --lastname User
-          --role Admin
-          --email admin@example.com
-      "
+      bash -c "airflow db migrate && airflow users create --username ${_AIRFLOW_WWW_USER_USERNAME:-admin} --password ${_AIRFLOW_WWW_USER_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email admin@example.com"
     restart: on-failure
 
   # ── airflow webserver ──────────────────────────────────────────────────────
   airflow-webserver:
     <<: *airflow-common
     command: >
-      bash -c "pip install -r /requirements.txt --quiet && airflow webserver"
+      bash -c "airflow webserver"
     ports:
-      - "8080:8080"
+      - "8081:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -146,7 +124,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: >
-      bash -c "pip install -r /requirements.txt --quiet && airflow scheduler"
+      bash -c "airflow scheduler"
     restart: unless-stopped
 
 volumes:
