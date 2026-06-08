@@ -28,7 +28,7 @@ from airflow.operators.python import PythonOperator
 
 log = logging.getLogger(__name__)
 
-# ── Constants ──────────────────────────────────────────────────────────────────
+# ── constants ──────────────────────────────────────────────────────────────────
 BUCKET          = "developer-job-market"
 DB_PATH         = "/opt/airflow/data/lake.duckdb"
 S3_ENDPOINT     = "http://localstack:4566"
@@ -56,7 +56,7 @@ def _s3_client():
     )
 
 
-# ── Task 1 — Fetch Adzuna jobs ─────────────────────────────────────────────────
+# ── task 1 — fetch adzuna jobs ─────────────────────────────────────────────────
 def fetch_adzuna_jobs(**context):
     if not ADZUNA_APP_ID or not ADZUNA_API_KEY:
         log.warning("ADZUNA credentials missing — generating synthetic data")
@@ -134,12 +134,12 @@ def _generate_synthetic_jobs(date_str: str):
     log.info("Uploaded %d synthetic jobs to s3://%s/%s", len(jobs), BUCKET, key)
 
 
-# ── Task 2 — Fetch Stack Overflow survey ───────────────────────────────────────
+# ── task 2 — fetch stack overflow survey ───────────────────────────────────────
 def fetch_so_survey(**context):
     s3 = _s3_client()
     key = "data/raw/stackoverflow/survey/survey_2023.csv"
 
-    # Only download once — the survey doesn't change
+    # only download once — the survey doesn't change
     try:
         s3.head_object(Bucket=BUCKET, Key=key)
         log.info("SO survey already in S3 — skipping download")
@@ -191,13 +191,13 @@ def _generate_synthetic_survey(s3_client, key: str):
     log.info("Uploaded synthetic SO survey (%d rows) to s3://%s/data/raw/stackoverflow/survey/survey_2023.csv", len(rows), BUCKET)
 
 
-# ── Task 3 — Load raw data into DuckDB ────────────────────────────────────────
+# ── task 3 — load raw data into duckdb ────────────────────────────────────────
 def load_raw_to_duckdb(**context):
     os.makedirs("/opt/airflow/data", exist_ok=True)
     s3 = _s3_client()
     con = duckdb.connect(DB_PATH)
 
-    # ── Adzuna jobs ──────────────────────────────────────────────────────────
+    # ── adzuna jobs ──────────────────────────────────────────────────────────
     obj = s3.get_object(Bucket=BUCKET, Key=f"data/raw/adzuna/jobs/{context['ds']}/jobs.json")
     jobs_raw: list[dict] = json.loads(obj["Body"].read())
 
@@ -233,7 +233,7 @@ def load_raw_to_duckdb(**context):
     ))
     log.info("Loaded %d rows into raw_adzuna_jobs", len(rows))
 
-    # ── Stack Overflow survey ────────────────────────────────────────────────
+    # ── stack overflow survey ────────────────────────────────────────────────
     obj = s3.get_object(Bucket=BUCKET, Key="data/raw/stackoverflow/survey/survey_2023.csv")
     survey_df = pd.read_csv(io.BytesIO(obj["Body"].read()), low_memory=False)
 
@@ -269,7 +269,7 @@ def _num(v) -> str:
         return "NULL"
 
 
-# ── Task 4 — Run DBT ───────────────────────────────────────────────────────────
+# ── task 4 — run dbt ───────────────────────────────────────────────────────────
 def run_dbt(**context):
     import subprocess
     result = subprocess.run(
@@ -284,19 +284,19 @@ def run_dbt(**context):
         raise RuntimeError(f"dbt run failed:\n{result.stderr}")
 
 
-# ── Task 5 — ML: salary prediction ────────────────────────────────────────────
+# ── task 5 — ml: salary prediction ────────────────────────────────────────────
 def run_salary_prediction(**context):
     from ml.salary_predictor import run
     run(db_path=DB_PATH)
 
 
-# ── Task 6 — ML: skill demand forecasting ─────────────────────────────────────
+# ── task 6 — ml: skill demand forecasting ─────────────────────────────────────
 def run_skill_forecast(**context):
     from ml.skill_forecaster import run
     run(db_path=DB_PATH)
 
 
-# ── Task 7 — Run remaining DBT models that depend on ML output ────────────────
+# ── task 7 — run remaining dbt models that depend on ml output ────────────────
 def run_dbt_ml_models(**context):
     import subprocess
     result = subprocess.run(
@@ -314,7 +314,7 @@ def run_dbt_ml_models(**context):
         raise RuntimeError(f"dbt run (ML models) failed:\n{result.stderr}")
 
 
-# ── Task 8 — Index marts into Elasticsearch ───────────────────────────────────
+# ── task 8 — index marts into elasticsearch ───────────────────────────────────
 def index_to_elasticsearch(**context):
     from elasticsearch import Elasticsearch, helpers
 
@@ -326,7 +326,10 @@ def index_to_elasticsearch(**context):
         "skill_demand":       "mart_skill_demand",
         "forecasts":          "mart_forecasts",
         "salary_predictions": "mart_salary_predictions",
-        "salary_comparison":  "mart_salary_comparison",   # UK vs SO global benchmark
+        "salary_comparison":  "mart_salary_comparison",     # uk vs so global benchmark
+        "skill_cooccurrence": "mart_skill_cooccurrence",    # skill-pair combo premiums
+        "remote_premium":     "mart_remote_premium",        # comp by remote / seniority
+        "skill_gap":          "mart_skill_gap",             # wanted vs used languages
     }
 
     for index_name, table_name in index_map.items():
@@ -347,7 +350,159 @@ def index_to_elasticsearch(**context):
     con.close()
 
 
-# ── DAG definition ─────────────────────────────────────────────────────────────
+# ── salary anomaly detection (independent side branch) ─────────────────────────
+# own model, own mart, own es index. nothing in the core flow depends on it,
+# so a failure here leaves the rest of the pipeline untouched.
+def run_salary_anomaly(**context):
+    from ml.salary_anomaly import run
+    run(db_path=DB_PATH)
+
+
+def run_dbt_anomaly_model(**context):
+    import subprocess
+    result = subprocess.run(
+        [
+            "dbt", "run",
+            "--profiles-dir", ".",
+            "--project-dir", "/opt/airflow/dbt",
+            "--select", "mart_salary_anomalies",
+        ],
+        capture_output=True, text=True, cwd="/opt/airflow/dbt",
+    )
+    log.info(result.stdout)
+    if result.returncode != 0:
+        log.error(result.stderr)
+        raise RuntimeError(f"dbt run (anomaly mart) failed:\n{result.stderr}")
+
+
+def index_anomalies_to_elasticsearch(**context):
+    from elasticsearch import Elasticsearch, helpers
+
+    es  = Elasticsearch(ES_HOST)
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        df = con.execute("SELECT * FROM mart_salary_anomalies").df()
+    finally:
+        con.close()
+
+    es.indices.delete(index="salary_anomalies", ignore_unavailable=True)
+    actions = [
+        {"_index": "salary_anomalies", "_source": row}
+        for row in df.to_dict(orient="records")
+    ]
+    if actions:
+        helpers.bulk(es, actions)
+    log.info("Indexed %d docs → ES index 'salary_anomalies'", len(actions))
+
+
+# ── publish curated marts to s3 as parquet (independent leaf) ──────────────────
+# writes each mart to the formatted/ layer the architecture promises. best-effort:
+# any mart that is missing is skipped, so it never blocks the run.
+EXPORT_MARTS = [
+    "mart_salary_by_skill",
+    "mart_skill_demand",
+    "mart_forecasts",
+    "mart_salary_predictions",
+    "mart_salary_comparison",
+    "mart_skill_cooccurrence",
+    "mart_remote_premium",
+    "mart_skill_gap",
+    "mart_salary_anomalies",
+    "mart_forecast_trends",
+]
+
+
+def export_marts_to_s3(**context):
+    s3  = _s3_client()
+    con = duckdb.connect(DB_PATH, read_only=True)
+    for mart in EXPORT_MARTS:
+        try:
+            df = con.execute(f"SELECT * FROM {mart}").df()
+        except Exception as exc:
+            log.warning("Skipping %s: %s", mart, exc)
+            continue
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        key = f"data/formatted/{mart}/{context['ds']}.parquet"
+        s3.put_object(Bucket=BUCKET, Key=key, Body=buf.getvalue())
+        log.info("Exported %d rows → s3://%s/%s", len(df), BUCKET, key)
+    con.close()
+
+
+# ── pipeline run metrics / freshness (independent leaf) ────────────────────────
+# captures row counts, model error and data freshness as one es doc per run,
+# keyed by run date so history accumulates. read-only — never blocks the run.
+def record_run_metrics(**context):
+    from elasticsearch import Elasticsearch
+
+    con = duckdb.connect(DB_PATH, read_only=True)
+
+    def scalar(sql):
+        try:
+            return con.execute(sql).fetchone()[0]
+        except Exception as exc:
+            log.warning("metric query failed (%s): %s", sql, exc)
+            return None
+
+    doc = {
+        "run_ts":                   datetime.utcnow().isoformat() + "Z",
+        "run_date":                 context["ds"],
+        "raw_jobs":                 scalar("select count(*) from raw_adzuna_jobs"),
+        "enriched_jobs":            scalar("select count(*) from int_jobs_enriched"),
+        "jobs_with_salary":         scalar("select count(*) from int_jobs_enriched where salary_gbp is not null"),
+        "skills_forecast":          scalar("select count(distinct skill) from mart_forecasts"),
+        "anomalies_flagged":        scalar("select count(*) from mart_salary_anomalies where anomaly_flag <> 'normal'"),
+        "avg_salary_abs_error_gbp": scalar("select round(avg(abs_error_gbp), 0) from mart_salary_predictions"),
+        "latest_posting_date":      scalar("select cast(max(created_at) as varchar) from int_jobs_enriched"),
+    }
+    con.close()
+
+    es = Elasticsearch(ES_HOST)
+    es.index(index="pipeline_metrics", id=context["ds"], document=doc)
+    log.info("Recorded run metrics: %s", doc)
+
+
+# ── forecast trend classification (independent side branch) ────────────────────
+# labels each skill rising / flat / declining from the prophet forecast.
+# own mart, own es index — depends only on mart_forecasts.
+def run_dbt_forecast_trends(**context):
+    import subprocess
+    result = subprocess.run(
+        [
+            "dbt", "run",
+            "--profiles-dir", ".",
+            "--project-dir", "/opt/airflow/dbt",
+            "--select", "mart_forecast_trends",
+        ],
+        capture_output=True, text=True, cwd="/opt/airflow/dbt",
+    )
+    log.info(result.stdout)
+    if result.returncode != 0:
+        log.error(result.stderr)
+        raise RuntimeError(f"dbt run (forecast trends) failed:\n{result.stderr}")
+
+
+def index_forecast_trends_to_elasticsearch(**context):
+    from elasticsearch import Elasticsearch, helpers
+
+    es  = Elasticsearch(ES_HOST)
+    con = duckdb.connect(DB_PATH, read_only=True)
+    try:
+        df = con.execute("SELECT * FROM mart_forecast_trends").df()
+    finally:
+        con.close()
+
+    es.indices.delete(index="forecast_trends", ignore_unavailable=True)
+    actions = [
+        {"_index": "forecast_trends", "_source": row}
+        for row in df.to_dict(orient="records")
+    ]
+    if actions:
+        helpers.bulk(es, actions)
+    log.info("Indexed %d docs → ES index 'forecast_trends'", len(actions))
+
+
+# ── dag definition ─────────────────────────────────────────────────────────────
 default_args = {
     "owner": "airflow",
     "retries": 1,
@@ -404,7 +559,56 @@ with DAG(
         python_callable=index_to_elasticsearch,
     )
 
-    # ── Dependency graph ───────────────────────────────────────────────────────
+    # salary anomaly detection — independent side branch (see functions above)
+    t_salary_anomaly = PythonOperator(
+        task_id="ml_salary_anomaly",
+        python_callable=run_salary_anomaly,
+    )
+
+    t_dbt_anomaly = PythonOperator(
+        task_id="run_dbt_anomaly_model",
+        python_callable=run_dbt_anomaly_model,
+    )
+
+    t_index_anomaly = PythonOperator(
+        task_id="index_anomalies_to_elasticsearch",
+        python_callable=index_anomalies_to_elasticsearch,
+    )
+
+    # publish marts to s3 — independent leaf off the main dbt-ml step
+    t_export_s3 = PythonOperator(
+        task_id="export_marts_to_s3",
+        python_callable=export_marts_to_s3,
+    )
+
+    # pipeline run metrics — independent leaf, keeps history across runs
+    t_run_metrics = PythonOperator(
+        task_id="record_run_metrics",
+        python_callable=record_run_metrics,
+    )
+
+    # forecast trend classification — independent side branch (see functions above)
+    t_dbt_trends = PythonOperator(
+        task_id="run_dbt_forecast_trends",
+        python_callable=run_dbt_forecast_trends,
+    )
+
+    t_index_trends = PythonOperator(
+        task_id="index_forecast_trends_to_elasticsearch",
+        python_callable=index_forecast_trends_to_elasticsearch,
+    )
+
+    # ── dependency graph ───────────────────────────────────────────────────────
     [t_fetch_adzuna, t_fetch_so] >> t_load_duckdb >> t_dbt
     t_dbt >> [t_salary_ml, t_forecast_ml]
     [t_salary_ml, t_forecast_ml] >> t_dbt_ml >> t_index_es
+
+    # anomaly branch hangs off t_dbt and never feeds back into the main flow.
+    t_dbt >> t_salary_anomaly >> t_dbt_anomaly >> t_index_anomaly
+
+    # forecast-trend branch hangs off t_dbt_ml and never feeds back.
+    t_dbt_ml >> t_dbt_trends >> t_index_trends
+
+    # best-effort leaves — export and run metrics, never block the core flow.
+    t_dbt_ml  >> t_export_s3
+    t_index_es >> t_run_metrics

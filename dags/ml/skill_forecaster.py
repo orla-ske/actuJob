@@ -54,13 +54,13 @@ def run(db_path: str = "/opt/airflow/data/lake.duckdb") -> None:
             future   = m.make_future_dataframe(periods=FORECAST_MONTHS, freq="MS")
             forecast = m.predict(future)
 
-            # Keep only future rows (beyond the last observed month)
+            # keep only future rows (beyond the last observed month)
             last_obs  = ts["ds"].max()
             future_fc = forecast[forecast["ds"] > last_obs][["ds", "yhat", "yhat_lower", "yhat_upper"]].copy()
             future_fc.columns = ["forecast_date", "predicted_demand", "demand_lower", "demand_upper"]
             future_fc["skill"] = skill
 
-            # Clip negatives — demand can't be negative
+            # clip negatives — demand can't be negative
             for col in ["predicted_demand", "demand_lower", "demand_upper"]:
                 future_fc[col] = future_fc[col].clip(lower=0)
 

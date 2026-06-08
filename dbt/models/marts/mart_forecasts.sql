@@ -1,5 +1,5 @@
--- Reads Prophet forecast output written by the ML task back into DuckDB.
--- The ML script writes /opt/airflow/data/skill_forecasts.parquet before this model runs.
+-- reads prophet forecast output written by the ml task back into duckdb.
+-- the script writes /opt/airflow/data/skill_forecasts.parquet before this model runs.
 
 {{ config(materialized='table') }}
 

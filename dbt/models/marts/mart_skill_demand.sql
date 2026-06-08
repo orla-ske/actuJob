@@ -1,5 +1,5 @@
--- Job posting counts per skill per month — the time-series fed into Prophet.
--- One row per (skill, month).
+-- job posting counts per skill per month — the time-series fed into prophet.
+-- one row per (skill, month).
 
 with jobs as (
     select * from {{ ref('int_jobs_enriched') }}

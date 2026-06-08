@@ -1,8 +1,8 @@
 # dbt/profiles.yml
 #
-# Tells DBT how to connect to DuckDB.
-# The database file lives in /opt/airflow/data/ (mounted from ./data/ on your host).
-# This file IS committed to Git because it contains no secrets.
+# tells dbt how to connect to duckdb.
+# the database file lives in /opt/airflow/data/ (mounted from ./data/ on your host).
+# this file is committed to git because it contains no secrets.
 
 job_market:
   target: dev

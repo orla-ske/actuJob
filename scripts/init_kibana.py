@@ -20,7 +20,7 @@ import requests
 KIBANA_URL = "http://localhost:5601"
 HEADERS = {"kbn-xsrf": "true", "Content-Type": "application/json"}
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── helpers ────────────────────────────────────────────────────────────────────
 
 def wait_for_kibana(retries: int = 30, delay: int = 5) -> None:
     print("Waiting for Kibana to be ready…")
@@ -66,7 +66,7 @@ def search_source(pattern_id: str) -> str:
     })
 
 
-# ── Index Patterns ─────────────────────────────────────────────────────────────
+# ── index patterns ─────────────────────────────────────────────────────────────
 
 def create_index_patterns() -> None:
     print("\n── Index Patterns ──")
@@ -76,6 +76,12 @@ def create_index_patterns() -> None:
         ("forecasts-ip",          "forecasts",           "forecast_date"),
         ("salary-comparison-ip",  "salary_comparison",   None),
         ("salary-predictions-ip", "salary_predictions",  None),
+        ("skill-cooccurrence-ip", "skill_cooccurrence",  None),
+        ("remote-premium-ip",     "remote_premium",      None),
+        ("salary-anomalies-ip",   "salary_anomalies",    None),
+        ("skill-gap-ip",          "skill_gap",           None),
+        ("forecast-trends-ip",    "forecast_trends",     None),
+        ("pipeline-metrics-ip",   "pipeline_metrics",    "run_ts"),
     ]
     for pid, title, time_field in patterns:
         attrs: dict = {"title": title, "fields": "[]"}
@@ -84,7 +90,7 @@ def create_index_patterns() -> None:
         save_object("index-pattern", pid, attrs)
 
 
-# ── Visualizations ─────────────────────────────────────────────────────────────
+# ── visualizations ─────────────────────────────────────────────────────────────
 
 def _vis_attrs(title: str, vis_type: str, aggs: list, params: dict, pattern_id: str) -> dict:
     vis_state = json.dumps({
@@ -105,7 +111,7 @@ def _vis_attrs(title: str, vis_type: str, aggs: list, params: dict, pattern_id: 
 def create_visualizations() -> None:
     print("\n── Visualizations ──")
 
-    # 1. Average salary by skill (horizontal bar)
+    # 1. average salary by skill (horizontal bar)
     save_object(
         "visualization", "salary-bar-viz",
         _vis_attrs(
@@ -136,7 +142,7 @@ def create_visualizations() -> None:
         references=index_ref("salary-by-skill-ip"),
     )
 
-    # 2. Job count by skill (horizontal bar)
+    # 2. job count by skill (horizontal bar)
     save_object(
         "visualization", "job-count-viz",
         _vis_attrs(
@@ -167,7 +173,7 @@ def create_visualizations() -> None:
         references=index_ref("salary-by-skill-ip"),
     )
 
-    # 3. Skill demand over time (multi-line)
+    # 3. skill demand over time (multi-line)
     save_object(
         "visualization", "demand-line-viz",
         _vis_attrs(
@@ -235,7 +241,7 @@ def create_visualizations() -> None:
         references=index_ref("forecasts-ip"),
     )
 
-    # 5. UK vs Global salary gap (horizontal bar)
+    # 5. uk vs global salary gap (horizontal bar)
     save_object(
         "visualization", "salary-gap-viz",
         _vis_attrs(
@@ -267,7 +273,7 @@ def create_visualizations() -> None:
     )
 
 
-# ── Dashboard ──────────────────────────────────────────────────────────────────
+# ── dashboard ──────────────────────────────────────────────────────────────────
 
 def create_dashboard() -> None:
     print("\n── Dashboard ──")
@@ -310,7 +316,7 @@ def create_dashboard() -> None:
     save_object("dashboard", "dev-job-market-dashboard", attrs, references)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
+# ── main ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     wait_for_kibana()

@@ -69,7 +69,7 @@ def run(db_path: str = "/opt/airflow/data/lake.duckdb") -> None:
     r2    = r2_score(y_test, preds)
     log.info("Salary model — MAE: £%.0f  R²: %.3f", mae, r2)
 
-    # Feature importance log
+    # feature importance log
     importance = dict(zip(SKILL_COLS, model.feature_importances_))
     top = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:5]
     log.info("Top skill predictors: %s", top)

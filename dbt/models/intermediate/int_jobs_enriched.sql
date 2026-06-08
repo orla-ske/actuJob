@@ -1,16 +1,16 @@
--- Enrich Adzuna job postings with SO survey global market benchmarks.
--- This is the core cross-source join of the project:
---   Adzuna  → live UK job postings (salary, skills from description)
---   SO survey → global developer compensation benchmark per skill
+-- enrich adzuna job postings with so survey global market benchmarks.
+-- this is the core cross-source join of the project:
+--   adzuna  → live uk job postings (salary, skills from description)
+--   so survey → global developer compensation benchmark per skill
 --
--- Result: each job row gains a so_market_benchmark_usd column representing
+-- result: each job row gains a so_market_benchmark_usd column representing
 -- what developers using that job's skill set earn globally.
 
 with jobs as (
     select * from {{ ref('stg_adzuna_jobs') }}
 ),
 
--- Compute per-skill global compensation benchmark from the SO survey.
+-- compute per-skill global compensation benchmark from the so survey.
 -- languages_used is a semicolon-separated list → unnest to one row per skill.
 so_skill_benchmarks as (
     select
@@ -30,8 +30,8 @@ so_skill_benchmarks as (
     having count(*) >= 5
 ),
 
--- Pivot the per-skill benchmarks into a single row so we can cross-join
--- without row multiplication. Covers the skills we detect from job descriptions.
+-- pivot the per-skill benchmarks into a single row so we can cross-join
+-- without row multiplication. covers the skills we detect from job descriptions.
 so_pivot as (
     select
         max(case when skill_name = 'Python'     then so_avg_comp_usd end) as so_python_usd,
@@ -60,7 +60,7 @@ skill_flags as (
         j.category,
         j.month,
         j.created_at,
-        -- Binary skill flags
+        -- binary skill flags
         (j.description ilike '%python%')::int                          as skill_python,
         (j.description ilike '%javascript%'
          or j.description ilike '%typescript%')::int                   as skill_javascript,
@@ -88,8 +88,8 @@ skill_flags as (
     from jobs j
 ),
 
--- Cross join with the single-row SO pivot to attach global benchmarks.
--- A weighted average of SO benchmarks for skills present in each job gives
+-- cross join with the single-row so pivot to attach global benchmarks.
+-- a weighted average of so benchmarks for skills present in each job gives
 -- the market expectation for that exact skill combination.
 enriched as (
     select
@@ -120,7 +120,7 @@ enriched as (
                 s.skill_rust       * (p.so_rust_usd is not null)::int   +
                 s.skill_scala      * (p.so_scala_usd is not null)::int
             , 0)
-        , 0) as so_market_benchmark_usd   -- global market comp for this skill set (USD)
+        , 0) as so_market_benchmark_usd   -- global market comp for this skill set (usd)
 
     from skill_flags s
     cross join so_pivot p

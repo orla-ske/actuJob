@@ -1,5 +1,5 @@
--- Reads LightGBM salary predictions written by the ML task.
--- The ML script writes /opt/airflow/data/salary_predictions.parquet before this model runs.
+-- reads lightgbm salary predictions written by the ml task.
+-- the script writes /opt/airflow/data/salary_predictions.parquet before this model runs.
 
 {{ config(materialized='table') }}
 

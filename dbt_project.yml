@@ -17,4 +17,4 @@ models:
     intermediate:
       +materialized: table     # heavier joins, materialise for performance
     marts:
-      +materialized: table     # final KPI outputs read by Elasticsearch indexer
+      +materialized: table     # final kpi outputs read by elasticsearch indexer

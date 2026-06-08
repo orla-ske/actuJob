@@ -1,6 +1,6 @@
--- Normalise the Stack Overflow Developer Survey.
--- Source: raw_stackoverflow_survey loaded from the CSV in S3.
--- We keep only rows with a valid compensation figure.
+-- normalise the stack overflow developer survey.
+-- source: raw_stackoverflow_survey loaded from the csv in s3.
+-- we keep only rows with a valid compensation figure.
 
 with source as (
     select * from raw_stackoverflow_survey
@@ -14,7 +14,7 @@ cleaned as (
         "YearsCodePro"                                  as years_code_pro,
         "EdLevel"                                       as education_level,
         "RemoteWork"                                    as remote_work,
-        -- Languages / tools are semicolon-separated lists
+        -- languages / tools are semicolon-separated lists
         "LanguageHaveWorkedWith"                        as languages_used,
         "LanguageWantToWorkWith"                        as languages_wanted,
         "DatabaseHaveWorkedWith"                        as databases_used,

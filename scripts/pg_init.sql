@@ -1,3 +1,3 @@
--- Creates the Superset metadata database alongside the Airflow one.
--- This script runs automatically on first postgres container start.
+-- creates the superset metadata database alongside the airflow one.
+-- this script runs automatically on first postgres container start.
 CREATE DATABASE superset;

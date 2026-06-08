@@ -1,5 +1,5 @@
--- Average and median salary per skill, from live Adzuna job postings.
--- Rows with no salary are excluded. One row per skill.
+-- average and median salary per skill, from live adzuna job postings.
+-- rows with no salary are excluded. one row per skill.
 
 with jobs as (
     select * from {{ ref('int_jobs_enriched') }}

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # scripts/init_localstack.sh
 #
-# Creates the S3 bucket in LocalStack on first run.
-# Run this once after `docker compose up`:
+# creates the s3 bucket in localstack on first run.
+# run this once after `docker compose up`:
 #   bash scripts/init_localstack.sh
 
 set -euo pipefail

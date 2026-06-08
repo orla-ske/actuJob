@@ -1,5 +1,5 @@
--- Normalise raw Adzuna API data: one row per job posting.
--- Source: raw_adzuna_jobs loaded by the Airflow DAG into DuckDB.
+-- normalise raw adzuna api data: one row per job posting.
+-- source: raw_adzuna_jobs loaded by the airflow dag into duckdb.
 
 with source as (
     select * from raw_adzuna_jobs
@@ -11,7 +11,7 @@ cleaned as (
         title                                          as job_title,
         company_name,
         location_name,
-        -- Midpoint salary; null when both bounds missing
+        -- midpoint salary; null when both bounds missing
         case
             when salary_min is not null and salary_max is not null
                 then (salary_min + salary_max) / 2.0

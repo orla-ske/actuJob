@@ -6,8 +6,8 @@ SQLALCHEMY_DATABASE_URI = os.environ.get(
     "postgresql+psycopg2://airflow:airflow@postgres/superset",
 )
 
-# Allow DuckDB connections from the UI
+# allow duckdb connections from the ui
 PREVENT_UNSAFE_DB_CONNECTIONS = False
 
-# Store uploaded files alongside the superset home
+# store uploaded files alongside the superset home
 UPLOAD_FOLDER = "/app/superset_home/uploads/"

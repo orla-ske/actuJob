@@ -1,17 +1,17 @@
--- UK job market salary vs SO global developer benchmark, per skill.
--- This is the headline cross-source insight: are UK developers over/underpaid
+-- uk job market salary vs so global developer benchmark, per skill.
+-- this is the headline cross-source insight: are uk developers over/underpaid
 -- relative to the global market for each skill?
 --
--- Sources:
---   Adzuna → UK posted salary (GBP)
---   SO survey → global developer compensation by skill (USD → GBP equiv)
+-- sources:
+--   adzuna → uk posted salary (gbp)
+--   so survey → global developer compensation by skill (usd → gbp equiv)
 
 with jobs as (
     select * from {{ ref('int_jobs_enriched') }}
     where salary_gbp is not null
 ),
 
--- Recompute per-skill SO benchmarks here for clean mart output
+-- recompute per-skill so benchmarks here for clean mart output
 so_benchmarks as (
     select
         trim(unnested_skill)            as skill_name,
@@ -29,7 +29,7 @@ so_benchmarks as (
     having count(*) >= 5
 ),
 
--- Map our Adzuna skill labels to SO survey skill names
+-- map our adzuna skill labels to so survey skill names
 skill_map (adzuna_skill, so_skill) as (
     values
         ('Python',     'Python'),
@@ -43,7 +43,7 @@ skill_map (adzuna_skill, so_skill) as (
         ('Scala',      'Scala')
 ),
 
--- UK average salary per skill from Adzuna postings
+-- uk average salary per skill from adzuna postings
 uk_by_skill as (
     select 'Python'     as skill, round(avg(salary_gbp), 0) as uk_avg_gbp, count(*) as uk_job_count from jobs where skill_python     = 1 union all
     select 'JavaScript' as skill, round(avg(salary_gbp), 0) as uk_avg_gbp, count(*) as uk_job_count from jobs where skill_javascript = 1 union all
@@ -62,7 +62,7 @@ select
     u.uk_avg_gbp                                                as uk_avg_salary_gbp,
     s.so_avg_usd                                                as global_so_avg_salary_usd,
     s.so_respondent_count                                       as global_so_respondents,
-    -- Convert USD→GBP at ~0.79 for apples-to-apples comparison
+    -- convert usd→gbp at ~0.79 for apples-to-apples comparison
     round(s.so_avg_usd * 0.79, 0)                              as global_so_avg_salary_gbp_equiv,
     round(u.uk_avg_gbp - (s.so_avg_usd * 0.79), 0)            as uk_vs_global_gap_gbp,
     case

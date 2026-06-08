@@ -15,10 +15,14 @@ __pycache__/
 *.egg-info/
 .venv/
 
-# IDE
+# ide
 .idea/
 .vscode/
 .md
 
-# macOS
+# macos
 .DS_Store
+
+# local working area (not for the team repo)
+testing/
+.claude/
