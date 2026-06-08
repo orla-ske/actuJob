@@ -7,6 +7,13 @@
 
 set -euo pipefail
 
+# localstack accepts any credentials, but the aws cli still needs *some* set or it
+# errors with NoCredentials. the real creds live in .env (read by the containers, not
+# this host shell), so default them here to keep the script runnable from any machine.
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
+export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
 ENDPOINT="http://localhost:4566"
 BUCKET="developer-job-market"
 

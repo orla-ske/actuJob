@@ -257,7 +257,16 @@ def load_raw_to_duckdb(**context):
 def run_dbt(**context):
     import subprocess
     result = subprocess.run(
-        ["dbt", "run", "--profiles-dir", ".", "--project-dir", "/opt/airflow/dbt"],
+        [
+            "dbt", "run",
+            "--profiles-dir", ".",
+            "--project-dir", "/opt/airflow/dbt",
+            # these marts read ml parquet output (or mart_forecasts) that doesn't exist
+            # yet — they are built later by run_dbt_ml_models / run_dbt_anomaly_model /
+            # run_dbt_forecast_trends, once their inputs are produced.
+            "--exclude",
+            "mart_forecasts mart_salary_predictions mart_salary_anomalies mart_forecast_trends",
+        ],
         capture_output=True,
         text=True,
         cwd="/opt/airflow/dbt",
@@ -346,7 +355,10 @@ def index_to_elasticsearch(**context):
         if errors:
             log.warning("ES index '%s' had %d failed docs (first: %s)",
                         index_name, len(errors), errors[0])
-        es.indices.refresh(index=index_name)
+        # refresh only when the index exists: it was pre-created above if it has a
+        # date field, otherwise the bulk above created it — skip if the mart was empty.
+        if actions or date_field:
+            es.indices.refresh(index=index_name)
         log.info("Indexed %d docs → ES index '%s'", len(actions), index_name)
 
     con.close()
@@ -397,7 +409,8 @@ def index_anomalies_to_elasticsearch(**context):
         if errors:
             log.warning("ES index 'salary_anomalies' had %d failed docs (first: %s)",
                         len(errors), errors[0])
-    es.indices.refresh(index="salary_anomalies")
+        # only refresh once bulk has created the index — an empty mart would 404.
+        es.indices.refresh(index="salary_anomalies")
     log.info("Indexed %d docs → ES index 'salary_anomalies'", len(actions))
 
 
@@ -508,7 +521,9 @@ def index_forecast_trends_to_elasticsearch(**context):
         if errors:
             log.warning("ES index 'forecast_trends' had %d failed docs (first: %s)",
                         len(errors), errors[0])
-    es.indices.refresh(index="forecast_trends")
+        # only refresh once the bulk has created the index — on a single run the
+        # forecast (and so this mart) can be empty, and refresh would 404 otherwise.
+        es.indices.refresh(index="forecast_trends")
     log.info("Indexed %d docs → ES index 'forecast_trends'", len(actions))
 
 
@@ -526,6 +541,7 @@ with DAG(
     schedule_interval="@daily",
     start_date=datetime(2024, 1, 1),
     catchup=False,
+    max_active_runs=1,  # duckdb is single-writer — never run two pipeline runs at once
     tags=["job-market", "dbt", "ml", "elasticsearch"],
 ) as dag:
 

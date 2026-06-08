@@ -8,10 +8,12 @@ with survey as (
         remote_work,
         dev_type,
         annual_comp_usd,
-        -- years_code_pro is free text ("Less than 1 year", "More than 50 years", or a number)
+        -- years_code_pro is free text ("Less than 1 year", "More than 50 years", or a
+        -- number). cast to varchar first so the comparisons are safe whether the source
+        -- column lands as text (real survey) or numeric (synthetic data).
         case
-            when years_code_pro = 'Less than 1 year'   then 0
-            when years_code_pro = 'More than 50 years' then 51
+            when cast(years_code_pro as varchar) = 'Less than 1 year'   then 0
+            when cast(years_code_pro as varchar) = 'More than 50 years' then 51
             else try_cast(years_code_pro as double)
         end as years_pro
     from {{ ref('stg_stackoverflow_survey') }}
