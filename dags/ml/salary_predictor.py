@@ -50,8 +50,8 @@ def run(db_path: str = "/opt/airflow/data/lake.duckdb") -> None:
     X = df[SKILL_COLS].values.astype(np.float32)
     y = df[TARGET_COL].values.astype(np.float32)
 
-    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
-        X, y, df.index, test_size=0.2, random_state=42
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
     )
 
     model = lgb.LGBMRegressor(
@@ -67,16 +67,19 @@ def run(db_path: str = "/opt/airflow/data/lake.duckdb") -> None:
     preds = model.predict(X_test)
     mae   = mean_absolute_error(y_test, preds)
     r2    = r2_score(y_test, preds)
-    log.info("Salary model — MAE: £%.0f  R²: %.3f", mae, r2)
+    log.info("Salary model (holdout) — MAE: £%.0f  R²: %.3f", mae, r2)
 
     # feature importance log
     importance = dict(zip(SKILL_COLS, model.feature_importances_))
     top = sorted(importance.items(), key=lambda x: x[1], reverse=True)[:5]
     log.info("Top skill predictors: %s", top)
 
-    results = df.loc[idx_test, ["job_id", "job_title", TARGET_COL]].copy()
+    # refit on all labelled rows and score every posting, so the predictions
+    # mart covers the full set rather than just the 20% holdout
+    model.fit(X, y)
+    results = df[["job_id", "job_title", TARGET_COL]].copy()
     results.columns = ["job_id", "job_title", "actual_salary_gbp"]
-    results["predicted_salary_gbp"] = preds
+    results["predicted_salary_gbp"] = model.predict(X)
 
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     results.to_parquet(OUTPUT_PATH, index=False)

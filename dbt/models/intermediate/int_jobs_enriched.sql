@@ -60,13 +60,14 @@ skill_flags as (
         j.category,
         j.month,
         j.created_at,
-        -- binary skill flags
+        -- binary skill flags. word-boundary regex (\b) is used where a plain
+        -- substring would over- or under-match: 'java' inside 'javascript',
+        -- 'sql' inside 'mysql', and short tokens like 'go' / 'ml'.
         (j.description ilike '%python%')::int                          as skill_python,
         (j.description ilike '%javascript%'
          or j.description ilike '%typescript%')::int                   as skill_javascript,
-        (j.description ilike '%java%'
-         and j.description not ilike '%javascript%')::int              as skill_java,
-        (j.description ilike '% sql%'
+        regexp_matches(j.description, '(?i)\bjava\b')::int             as skill_java,
+        (regexp_matches(j.description, '(?i)\bsql\b')
          or j.description ilike '%postgresql%'
          or j.description ilike '%mysql%')::int                        as skill_sql,
         (j.description ilike '%react%')::int                           as skill_react,
@@ -79,10 +80,9 @@ skill_flags as (
          or j.description ilike '%gcp%'
          or j.description ilike '%cloud%')::int                        as skill_cloud,
         (j.description ilike '%machine learning%'
-         or j.description ilike '% ml %'
+         or regexp_matches(j.description, '(?i)\bml\b')
          or j.description ilike '%data science%')::int                 as skill_ml,
-        (j.description ilike '%golang%'
-         or j.description ilike '% go %')::int                         as skill_go,
+        regexp_matches(j.description, '(?i)\b(go|golang)\b')::int      as skill_go,
         (j.description ilike '%rust%')::int                            as skill_rust,
         (j.description ilike '%scala%')::int                           as skill_scala
     from jobs j

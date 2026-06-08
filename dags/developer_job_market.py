@@ -115,6 +115,9 @@ def _generate_synthetic_jobs(date_str: str):
         sal_min = random.randint(35, 90) * 1000
         sal_max = sal_min + random.randint(5, 25) * 1000
         uid = hashlib.md5(f"{date_str}{i}".encode()).hexdigest()[:12]
+        # spread postings over the past ~8 months so the demand time-series
+        # has enough monthly points for the forecaster to work with
+        created = datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=random.randint(0, 240))
         jobs.append({
             "id": uid,
             "title": title,
@@ -126,7 +129,7 @@ def _generate_synthetic_jobs(date_str: str):
             "category": {"label": "IT Jobs"},
             "description": f"We are looking for a {title}. Skills: {', '.join(kws)}. "
                            f"Experience with {', '.join(kws[:2])} required.",
-            "created": f"{date_str}T09:00:00Z",
+            "created": created.strftime("%Y-%m-%dT09:00:00Z"),
         })
 
     key = f"data/raw/adzuna/jobs/{date_str}/jobs.json"
@@ -216,22 +219,16 @@ def load_raw_to_duckdb(**context):
             "created":        j.get("created"),
         })
 
+    # register as a dataframe instead of string-building a VALUES list:
+    # handles an empty result set and keeps full-length descriptions intact
+    jobs_df = pd.DataFrame(rows, columns=[
+        "id", "title", "company_name", "location_name",
+        "salary_min", "salary_max", "contract_type", "category_label",
+        "description", "created",
+    ])
     con.execute("DROP TABLE IF EXISTS raw_adzuna_jobs")
-    con.execute("""
-        CREATE TABLE raw_adzuna_jobs AS
-        SELECT * FROM (VALUES %s) AS t(
-            id, title, company_name, location_name,
-            salary_min, salary_max, contract_type, category_label,
-            description, created
-        )
-    """ % ",".join(
-        f"({_val(r['id'])},{_val(r['title'])},{_val(r['company_name'])},"
-        f"{_val(r['location_name'])},{_num(r['salary_min'])},{_num(r['salary_max'])},"
-        f"{_val(r['contract_type'])},{_val(r['category_label'])},"
-        f"{_val(r['description'])},{_val(r['created'])})"
-        for r in rows
-    ))
-    log.info("Loaded %d rows into raw_adzuna_jobs", len(rows))
+    con.execute("CREATE TABLE raw_adzuna_jobs AS SELECT * FROM jobs_df")
+    log.info("Loaded %d rows into raw_adzuna_jobs", len(jobs_df))
 
     # ── stack overflow survey ────────────────────────────────────────────────
     obj = s3.get_object(Bucket=BUCKET, Key="data/raw/stackoverflow/survey/survey_2023.csv")
@@ -254,19 +251,6 @@ def load_raw_to_duckdb(**context):
     log.info("Loaded %d rows into raw_stackoverflow_survey", len(survey_df))
 
     con.close()
-
-
-def _val(v) -> str:
-    if v is None:
-        return "NULL"
-    return "'" + str(v).replace("'", "''")[:2000] + "'"
-
-
-def _num(v) -> str:
-    try:
-        return str(float(v))
-    except (TypeError, ValueError):
-        return "NULL"
 
 
 # ── task 4 — run dbt ───────────────────────────────────────────────────────────
@@ -332,6 +316,13 @@ def index_to_elasticsearch(**context):
         "skill_gap":          "mart_skill_gap",             # wanted vs used languages
     }
 
+    # fields that must be typed as date so kibana's time-based vizzes work,
+    # rather than leaving it to elasticsearch dynamic mapping
+    date_fields = {
+        "skill_demand": "month",
+        "forecasts":    "forecast_date",
+    }
+
     for index_name, table_name in index_map.items():
         try:
             df = con.execute(f"SELECT * FROM {table_name}").df()
@@ -340,11 +331,22 @@ def index_to_elasticsearch(**context):
             continue
 
         es.indices.delete(index=index_name, ignore_unavailable=True)
+        date_field = date_fields.get(index_name)
+        if date_field:
+            es.indices.create(
+                index=index_name,
+                mappings={"properties": {date_field: {"type": "date"}}},
+            )
+
         actions = [
             {"_index": index_name, "_source": row}
             for row in df.to_dict(orient="records")
         ]
-        helpers.bulk(es, actions)
+        _, errors = helpers.bulk(es, actions, stats_only=False, raise_on_error=False)
+        if errors:
+            log.warning("ES index '%s' had %d failed docs (first: %s)",
+                        index_name, len(errors), errors[0])
+        es.indices.refresh(index=index_name)
         log.info("Indexed %d docs → ES index '%s'", len(actions), index_name)
 
     con.close()
@@ -391,7 +393,11 @@ def index_anomalies_to_elasticsearch(**context):
         for row in df.to_dict(orient="records")
     ]
     if actions:
-        helpers.bulk(es, actions)
+        _, errors = helpers.bulk(es, actions, raise_on_error=False)
+        if errors:
+            log.warning("ES index 'salary_anomalies' had %d failed docs (first: %s)",
+                        len(errors), errors[0])
+    es.indices.refresh(index="salary_anomalies")
     log.info("Indexed %d docs → ES index 'salary_anomalies'", len(actions))
 
 
@@ -498,7 +504,11 @@ def index_forecast_trends_to_elasticsearch(**context):
         for row in df.to_dict(orient="records")
     ]
     if actions:
-        helpers.bulk(es, actions)
+        _, errors = helpers.bulk(es, actions, raise_on_error=False)
+        if errors:
+            log.warning("ES index 'forecast_trends' had %d failed docs (first: %s)",
+                        len(errors), errors[0])
+    es.indices.refresh(index="forecast_trends")
     log.info("Indexed %d docs → ES index 'forecast_trends'", len(actions))
 
 

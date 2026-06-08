@@ -10,6 +10,10 @@ macro-paths: ["macros"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+vars:
+  # usd -> gbp conversion rate for the uk vs global salary comparison
+  usd_to_gbp: 0.79
+
 models:
   job_market:
     staging:

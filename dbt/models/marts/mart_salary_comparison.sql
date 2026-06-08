@@ -62,12 +62,13 @@ select
     u.uk_avg_gbp                                                as uk_avg_salary_gbp,
     s.so_avg_usd                                                as global_so_avg_salary_usd,
     s.so_respondent_count                                       as global_so_respondents,
-    -- convert usd→gbp at ~0.79 for apples-to-apples comparison
-    round(s.so_avg_usd * 0.79, 0)                              as global_so_avg_salary_gbp_equiv,
-    round(u.uk_avg_gbp - (s.so_avg_usd * 0.79), 0)            as uk_vs_global_gap_gbp,
+    -- convert usd→gbp for apples-to-apples comparison.
+    -- rate is overridable: dbt run --vars 'usd_to_gbp: 0.80'
+    round(s.so_avg_usd * {{ var('usd_to_gbp', 0.79) }}, 0)     as global_so_avg_salary_gbp_equiv,
+    round(u.uk_avg_gbp - (s.so_avg_usd * {{ var('usd_to_gbp', 0.79) }}), 0) as uk_vs_global_gap_gbp,
     case
-        when u.uk_avg_gbp > (s.so_avg_usd * 0.79) then 'UK above global'
-        when u.uk_avg_gbp < (s.so_avg_usd * 0.79) then 'UK below global'
+        when u.uk_avg_gbp > (s.so_avg_usd * {{ var('usd_to_gbp', 0.79) }}) then 'UK above global'
+        when u.uk_avg_gbp < (s.so_avg_usd * {{ var('usd_to_gbp', 0.79) }}) then 'UK below global'
         else 'Parity'
     end                                                         as market_position
 from uk_by_skill u

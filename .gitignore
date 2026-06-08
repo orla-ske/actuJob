@@ -23,6 +23,6 @@ __pycache__/
 # macos
 .DS_Store
 
-# local working area (not for the team repo)
+# testing and validation
 testing/
 .claude/

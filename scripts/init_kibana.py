@@ -5,19 +5,22 @@ Kibana Saved Objects REST API.
 
 Run once after the pipeline has indexed data into Elasticsearch:
     python scripts/init_kibana.py
-or from inside the airflow-scheduler container:
-    docker compose exec airflow-scheduler python /opt/airflow/dags/../scripts/init_kibana.py
+
+Override the target with KIBANA_URL if Kibana isn't on localhost, e.g.
+    KIBANA_URL=http://kibana:5601 python scripts/init_kibana.py
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 
 import requests
 
-KIBANA_URL = "http://localhost:5601"
+# defaults to localhost for running from the host; override with KIBANA_URL
+KIBANA_URL = os.environ.get("KIBANA_URL", "http://localhost:5601")
 HEADERS = {"kbn-xsrf": "true", "Content-Type": "application/json"}
 
 # ── helpers ────────────────────────────────────────────────────────────────────

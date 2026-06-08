@@ -28,7 +28,7 @@ job-market-pipeline/
 ├── scripts/
 │   └── init_localstack.sh         # Creates the S3 bucket on first run
 ├── kibana/
-│   └── export.ndjson              # Dashboard export (add after building it)
+│   └── export.ndjson              # legacy stub; dashboards come from scripts/init_kibana.py
 ├── data/                          # ← gitignored, auto-created by the pipeline
 ├── logs/                          # ← gitignored
 ├── docker-compose.yml
@@ -108,6 +108,18 @@ Or from the terminal:
 docker compose exec airflow-scheduler \
   airflow dags trigger developer_job_market_pipeline
 ```
+
+## Building the Kibana dashboard
+
+After the first successful run has indexed data into Elasticsearch, provision the index
+patterns and dashboard:
+
+```bash
+python scripts/init_kibana.py
+```
+
+This script (not `kibana/export.ndjson`) is the source of truth for the Kibana setup.
+Then open http://localhost:5601 → Dashboards → "Developer Job Market".
 
 ## Stopping everything
 
